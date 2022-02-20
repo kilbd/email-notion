@@ -1,16 +1,40 @@
-import { Stack, StackProps } from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import "dotenv/config";
+import { Stack, StackProps } from "aws-cdk-lib";
+import * as cdk from "aws-cdk-lib";
+import {
+  aws_s3 as s3,
+  aws_ses as ses,
+  aws_ses_actions as actions,
+} from "aws-cdk-lib";
+import { Construct } from "constructs";
 
 export class EmailNotionStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
     // The code that defines your stack goes here
-
-    // example resource
-    // const queue = new sqs.Queue(this, 'EmailNotionQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+    const bucket = new s3.Bucket(this, "email", {
+      versioned: true,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
+    // Only one RuleSet can be active at a time. If you create one from scratch,
+    // you have to activate it in the AWS console each time. It makes more
+    // sense to get the active RuleSet and change its rules.
+    const activeRuleSet = ses.ReceiptRuleSet.fromReceiptRuleSetName(
+      this,
+      "sesRuleSet",
+      "default"
+    );
+    activeRuleSet.addRule("assignRule", {
+      receiptRuleName: "AssignRule",
+      recipients: process.env.ASSIGN_EMAILS?.split(","),
+      actions: [
+        new actions.S3({
+          bucket,
+          objectKeyPrefix: `${process.env.ASSIGN_FOLDER}/`,
+        }),
+      ],
+    });
   }
 }
