@@ -1,7 +1,12 @@
+# TypeScript
 *.js
 !jest.config.js
 *.d.ts
 node_modules
+
+#Rust
+target
+zips
 
 # CDK asset staging directory
 .cdk.staging

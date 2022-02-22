@@ -2,6 +2,7 @@ import "dotenv/config";
 import { Stack, StackProps } from "aws-cdk-lib";
 import * as cdk from "aws-cdk-lib";
 import {
+  aws_lambda as lambda,
   aws_s3 as s3,
   aws_ses as ses,
   aws_ses_actions as actions,
@@ -13,10 +14,20 @@ export class EmailNotionStack extends Stack {
     super(scope, id, props);
 
     // The code that defines your stack goes here
+    const keyPrefix = `${process.env.ASSIGN_FOLDER}/`;
     const bucket = new s3.Bucket(this, "email", {
       versioned: true,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+    });
+    const assign = new lambda.Function(this, "AssignHandler", {
+      code: lambda.Code.fromAsset("lambda/zips/assign-task"),
+      environment: {
+        S3BUCKET: bucket.bucketName,
+        KEY_PREFIX: keyPrefix,
+      },
+      handler: "assign-task",
+      runtime: lambda.Runtime.PROVIDED_AL2,
     });
     // Only one RuleSet can be active at a time. If you create one from scratch,
     // you have to activate it in the AWS console each time. It makes more
@@ -32,7 +43,10 @@ export class EmailNotionStack extends Stack {
       actions: [
         new actions.S3({
           bucket,
-          objectKeyPrefix: `${process.env.ASSIGN_FOLDER}/`,
+          objectKeyPrefix: keyPrefix,
+        }),
+        new actions.Lambda({
+          function: assign,
         }),
       ],
     });
