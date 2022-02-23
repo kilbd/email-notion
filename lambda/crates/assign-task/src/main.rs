@@ -3,6 +3,7 @@ use std::env;
 use aws_lambda_events::event::ses::SimpleEmailEvent;
 use lambda_runtime::{service_fn, Error, LambdaEvent};
 use log::LevelFilter;
+use mailparse::*;
 use simple_logger::SimpleLogger;
 
 #[tokio::main]
@@ -17,7 +18,6 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
-    log::info!("Processing event...");
     let bucket_name = env::var("S3BUCKET")?;
     let key_prefix = env::var("KEY_PREFIX")?;
     let shared_config = aws_config::load_from_env().await;
@@ -25,20 +25,29 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
     let record = &event.payload.records[0];
     if let Some(msg_id) = &record.ses.mail.message_id {
         let object_key = format!("{key_prefix}{msg_id}");
-        log::info!("{object_key}");
-        let email = s3
+        let saved_email = s3
             .get_object()
             .bucket(&bucket_name)
             .key(&object_key)
             .response_content_type("text/plain")
             .send()
             .await?;
-        let data = email.body.collect().await?;
-        let message = String::from_utf8(data.into_bytes().to_vec())?;
-        log::info!("{message}");
-    }
-    if let Some(subject) = &record.ses.mail.common_headers.subject {
-        log::info!("message: {subject}");
+        let data = saved_email.body.collect().await?;
+        let bytes = data.into_bytes().to_vec();
+        let email = parse_mail(&bytes)?;
+        let assign_addr: String;
+        match &addrparse_header(email.headers.get_first_header("From").unwrap())?[0] {
+            MailAddr::Single(info) => {
+                assign_addr = info.addr.to_string();
+            }
+            _ => panic!(),
+        }
+        log::info!("Task from: {assign_addr}");
+        // Using plain text version
+        let body = email.subparts[0].get_body()?;
+        log::info!("Note: {body}");
+        let subject = email.headers.get_first_value("Subject").unwrap();
+        log::info!("Task name: {subject}");
     }
     Ok(())
 }
