@@ -20,19 +20,25 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
     log::info!("Processing event...");
     let bucket_name = env::var("S3BUCKET")?;
     let key_prefix = env::var("KEY_PREFIX")?;
-    log::info!("Environment: bucket = {bucket_name}, prefix = {key_prefix}");
-    for record in event.payload.records {
-        let all_recipients = record.ses.receipt.recipients;
-        log::info!("recipients: {all_recipients:?}");
-        if let Some(subject) = record.ses.mail.common_headers.subject {
-            log::info!("message: {subject}");
-        }
-        if let Some(msg_id) = record.ses.mail.message_id {
-            log::info!("message ID: {msg_id}");
-        }
-        if let Some(action_type) = record.ses.receipt.action.type_ {
-            log::info!("Action type: {action_type}");
-        }
+    let shared_config = aws_config::load_from_env().await;
+    let s3 = aws_sdk_s3::Client::new(&shared_config);
+    let record = &event.payload.records[0];
+    if let Some(msg_id) = &record.ses.mail.message_id {
+        let object_key = format!("{key_prefix}{msg_id}");
+        log::info!("{object_key}");
+        let email = s3
+            .get_object()
+            .bucket(&bucket_name)
+            .key(&object_key)
+            .response_content_type("text/plain")
+            .send()
+            .await?;
+        let data = email.body.collect().await?;
+        let message = String::from_utf8(data.into_bytes().to_vec())?;
+        log::info!("{message}");
+    }
+    if let Some(subject) = &record.ses.mail.common_headers.subject {
+        log::info!("message: {subject}");
     }
     Ok(())
 }

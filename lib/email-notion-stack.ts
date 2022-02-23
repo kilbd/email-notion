@@ -29,6 +29,7 @@ export class EmailNotionStack extends Stack {
       handler: "assign-task",
       runtime: lambda.Runtime.PROVIDED_AL2,
     });
+    bucket.grantRead(assign);
     // Only one RuleSet can be active at a time. If you create one from scratch,
     // you have to activate it in the AWS console each time. It makes more
     // sense to get the active RuleSet and change its rules.
