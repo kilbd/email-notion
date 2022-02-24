@@ -26,6 +26,7 @@ export class EmailNotionStack extends Stack {
         S3BUCKET: bucket.bucketName,
         KEY_PREFIX: keyPrefix,
         NOTION_TOKEN: process.env.NOTION_TOKEN || "",
+        DATABASE_ID: process.env.DATABASE_ID || "",
       },
       handler: "assign-task",
       runtime: lambda.Runtime.PROVIDED_AL2,
