@@ -83,6 +83,18 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
         // Using plain text version
         let body = email.subparts[0].get_body()?;
         let subject = email.headers.get_first_value("Subject").unwrap();
+        let paragraphs = body
+            .split('\n')
+            .collect::<Vec<&str>>()
+            .iter()
+            .filter_map(|substr| {
+                if !substr.is_empty() {
+                    Some(BlockData::new(substr.to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<BlockData>>();
         // In case you didn't know, Notion's data model is verbose.
         let task_data = TaskData {
             parent: TypedData::database(env::var("DATABASE_ID").unwrap()),
@@ -94,19 +106,13 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
                     person: UserEmail { email: assign_addr },
                 }),
             },
-            children: vec![BlockData {
-                object: String::from("block"),
-                data_type: String::from("paragraph"),
-                paragraph: ParagraphContent {
-                    text: vec![TypedData::text(TextContent { content: body })],
-                },
-            }],
+            children: paragraphs,
         };
-        let body = serde_json::to_string(&task_data).unwrap();
+        let req_body = serde_json::to_string(&task_data).unwrap();
         let client = CLIENT.get().unwrap();
         let response = client
             .post("https://api.notion.com/v1/pages")
-            .body(body)
+            .body(req_body)
             .send()
             .await?;
         if response.status().eq(&StatusCode::OK) {
@@ -181,6 +187,20 @@ struct BlockData {
     #[serde(rename = "type")]
     data_type: String,
     paragraph: ParagraphContent,
+}
+
+impl BlockData {
+    fn new(text_content: String) -> Self {
+        BlockData {
+            object: String::from("block"),
+            data_type: String::from("paragraph"),
+            paragraph: ParagraphContent {
+                text: vec![TypedData::text(TextContent {
+                    content: text_content,
+                })],
+            },
+        }
+    }
 }
 
 #[derive(Serialize)]
