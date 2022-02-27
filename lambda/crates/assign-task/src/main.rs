@@ -9,8 +9,9 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, StatusCode,
 };
-use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
+
+use email_notion::notion::*;
 
 static USERS: OnceCell<Vec<UserData>> = OnceCell::new();
 static CLIENT: OnceCell<Client> = OnceCell::new();
@@ -123,129 +124,4 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
         }
     }
     Ok(())
-}
-
-#[derive(Deserialize)]
-struct UserData {
-    id: String,
-    person: Option<UserEmail>,
-}
-
-#[derive(Deserialize, Serialize)]
-struct UserEmail {
-    email: String,
-}
-
-#[derive(Deserialize)]
-struct NotionApiUserResponse {
-    results: Vec<UserData>,
-}
-
-#[derive(Serialize)]
-struct PersonData {
-    id: String,
-    #[serde(rename = "type")]
-    data_type: String,
-    person: UserEmail,
-}
-
-#[derive(Serialize)]
-struct TextContent {
-    content: String,
-}
-
-#[derive(Serialize)]
-struct TypedData {
-    #[serde(rename = "type")]
-    data_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    database_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    people: Option<Vec<PersonData>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    text: Option<TextContent>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    title: Option<Vec<TypedData>>,
-}
-
-#[derive(Serialize)]
-struct Properties {
-    #[serde(rename = "Name")]
-    name: TypedData,
-    #[serde(rename = "Assign")]
-    assign: TypedData,
-}
-
-#[derive(Serialize)]
-struct ParagraphContent {
-    text: Vec<TypedData>,
-}
-
-#[derive(Serialize)]
-struct BlockData {
-    object: String,
-    #[serde(rename = "type")]
-    data_type: String,
-    paragraph: ParagraphContent,
-}
-
-impl BlockData {
-    fn new(text_content: String) -> Self {
-        BlockData {
-            object: String::from("block"),
-            data_type: String::from("paragraph"),
-            paragraph: ParagraphContent {
-                text: vec![TypedData::text(TextContent {
-                    content: text_content,
-                })],
-            },
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct TaskData {
-    parent: TypedData,
-    properties: Properties,
-    children: Vec<BlockData>,
-}
-
-impl TypedData {
-    fn new() -> Self {
-        TypedData {
-            data_type: String::from("none"),
-            database_id: None,
-            people: None,
-            text: None,
-            title: None,
-        }
-    }
-
-    fn database(id: String) -> Self {
-        let mut data = TypedData::new();
-        data.data_type = String::from("database_id");
-        data.database_id = Some(id);
-        data
-    }
-
-    fn people(people: PersonData) -> Self {
-        let mut data = TypedData::new();
-        data.data_type = String::from("people");
-        data.people = Some(vec![people]);
-        data
-    }
-
-    fn text(text: TextContent) -> Self {
-        let mut data = TypedData::new();
-        data.data_type = String::from("text");
-        data.text = Some(text);
-        data
-    }
-
-    fn title(title: TypedData) -> Self {
-        let mut data = TypedData::new();
-        data.data_type = String::from("title");
-        data.title = Some(vec![title]);
-        data
-    }
 }
