@@ -1,3 +1,4 @@
+pub mod email;
 pub mod notion;
 
 #[cfg(test)]

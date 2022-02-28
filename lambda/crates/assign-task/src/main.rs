@@ -3,7 +3,6 @@ use std::env;
 use aws_lambda_events::event::ses::SimpleEmailEvent;
 use lambda_runtime::{service_fn, Error, LambdaEvent};
 use log::LevelFilter;
-use mailparse::*;
 use once_cell::sync::OnceCell;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -11,6 +10,7 @@ use reqwest::{
 };
 use simple_logger::SimpleLogger;
 
+use email_notion::email::parse_email;
 use email_notion::notion::*;
 
 static USERS: OnceCell<Vec<UserData>> = OnceCell::new();
@@ -62,28 +62,21 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
             .await?;
         let data = saved_email.body.collect().await?;
         let bytes = data.into_bytes().to_vec();
-        let email = parse_mail(&bytes)?;
-        let assign_addr: String;
-        match &addrparse_header(email.headers.get_first_header("From").unwrap())?[0] {
-            MailAddr::Single(info) => {
-                assign_addr = info.addr.to_string();
-            }
-            _ => panic!(),
-        }
+        let email = parse_email(&bytes)?;
         let users = USERS.get().unwrap();
         let assign_id: String;
         match users
             .iter()
-            .find(|&i| i.person.as_ref().unwrap().email == assign_addr)
+            .find(|&i| i.person.as_ref().unwrap().email == email.from)
         {
             Some(user) => {
                 assign_id = String::from(&user.id);
             }
-            None => panic!("{assign_addr} is not in our Notion Workspace!"),
+            None => panic!("{} is not in our Notion Workspace!", email.from),
         }
         // Using plain text version
-        let body = email.subparts[0].get_body()?;
-        let subject = email.headers.get_first_value("Subject").unwrap();
+        let body = email.body;
+        let subject = email.subject;
         let paragraphs = body
             .split('\n')
             .collect::<Vec<&str>>()
@@ -104,7 +97,7 @@ async fn handler(event: LambdaEvent<SimpleEmailEvent>) -> Result<(), Error> {
                 assign: TypedData::people(PersonData {
                     id: assign_id,
                     data_type: String::from("person"),
-                    person: UserEmail { email: assign_addr },
+                    person: UserEmail { email: email.from },
                 }),
             },
             children: paragraphs,
